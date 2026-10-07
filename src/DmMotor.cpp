@@ -29,6 +29,7 @@ bool DmMotor::beginBus(int txPin, int rxPin)
     }
     started_  = true;
     rxCount_  = 0;
+    resetTurns();
     status_   = 0;
     lastFbMs_ = 0;
     Serial.println("[CAN] started (1Mbps)");
@@ -100,7 +101,16 @@ void DmMotor::handleFeedback(const uint8_t d[8])
     uint32_t t = ((uint32_t)(d[4] & 0x0F) << 8) | d[5];
 
     status_   = d[0] >> 4;
-    pos_      = uintToFloat(p, -pmax_, pmax_, 16);
+    // 1 周期で半分以上跳んだら回り込みとみなす (実際にそこまで速く動くことはない)
+    if (haveRaw_) {
+        int32_t diff = (int32_t)p - lastRaw_;
+        if (diff > 0x8000) turns_--;
+        else if (diff < -0x8000) turns_++;
+    }
+    lastRaw_ = p;
+    haveRaw_ = true;
+
+    pos_      = uintToFloat(p, -pmax_, pmax_, 16) + turns_ * 2.0f * pmax_;
     vel_      = uintToFloat(v, -vmax_, vmax_, 12);
     tor_      = uintToFloat(t, -tmax_, tmax_, 12);
     tMos_     = d[6];

@@ -63,11 +63,11 @@ static float clampTarget(float rad)
 
 static void printStatus()
 {
-    Serial.printf("STAT mode=%s id=0x%03X st=%X pos=%.2f vel=%.2f tq=%.3f tgt=%.2f spd=%.1f tmos=%d trot=%d\n",
+    Serial.printf("STAT mode=%s id=0x%03X st=%X pos=%.2f vel=%.2f tq=%.3f tgt=%.2f spd=%.1f tmos=%d trot=%d range=%s\n",
                   modeName(mode), motor.canId(), motor.status(), radToDeg(motor.position()),
                   radToDeg(motor.velocity()), motor.torque(),
                   mode == Mode::Vel ? radToDeg(targetVel) : radToDeg(targetPos), radToDeg(speedLimit),
-                  motor.tempMos(), motor.tempRotor());
+                  motor.tempMos(), motor.tempRotor(), motor.positionInRange() ? "ok" : "over");
 }
 
 // 無効状態でフィードバックを取得する (無効化コマンドへの応答を使う。モーターは動かない)
@@ -147,6 +147,10 @@ static bool enableFromOff(Mode m)
         reply(false, "no feedback");
         return false;
     }
+    if (m == Mode::Pos && !motor.positionInRange()) {
+        reply(false, "position %.0f deg is beyond PMAX range (run 'zero' first)", radToDeg(motor.position()));
+        return false;
+    }
     targetPos = clampTarget(motor.position());
     targetVel = 0;
     motor.enable();
@@ -170,7 +174,17 @@ static bool switchMode(Mode m)
     if (mode == m) return true;
     if (mode == Mode::Off) return enableFromOff(m);
 
-    if (mode == Mode::Vel) motor.sendVel(0);
+    if (mode == Mode::Vel) {
+        targetVel = 0;
+        motor.sendVel(0);
+        motor.waitFeedback(20);
+        if (m == Mode::Pos && !motor.positionInRange()) {
+            // 位置が正しく表せないので POS にすると大きく動いてしまう。VEL のまま止める
+            reply(false, "position %.0f deg is beyond PMAX range: stopped in VEL (run 'off', 'zero', 'on')",
+                  radToDeg(motor.position()));
+            return false;
+        }
+    }
     if (!setCtrlMode(m == Mode::Vel ? DmMotor::MODE_VEL : DmMotor::MODE_POS_VEL)) {
         disableMotor();
         return false;
@@ -225,7 +239,7 @@ static void printHelp()
         "#  move <deg>         相対移動\n"
         "#  speed <deg/s>      位置移動の速度上限\n"
         "#  vel <deg/s>        速度モードで回転 (0 で停止)\n"
-        "#  stop               その場で停止 (位置モードで保持)\n"
+        "#  stop               その場で停止 (速度モード中は速度 0)\n"
         "#  clear              モーターのエラー解除 (無効化される)\n"
         "#  zero               現在位置を 0 にする (off のときのみ)\n"
         "#  status | s         状態を 1 行表示\n"
@@ -294,11 +308,12 @@ static void handleCommand(char *line)
     } else if (cmd == "stop") {
         if (!requireEnabled()) return;
         if (mode == Mode::Vel) {
-            if (!switchMode(Mode::Pos)) return;
-        } else {
-            motor.poll();
-            targetPos = clampTarget(motor.position());
+            // VEL のまま速度 0 で止める (POS に切り替えると位置が飛ぶことがあるため)
+            targetVel = 0;
+            return reply(true, "vel=0 (stopped)");
         }
+        motor.poll();
+        targetPos = clampTarget(motor.position());
         reply(true, "hold pos=%.2f", radToDeg(targetPos));
 
     } else if (cmd == "clear") {
@@ -483,6 +498,11 @@ void loop()
                 Serial.println("EVT motor error: disabled (run 'clear' then 'on')");
             }
         }
+        static bool wasInRange = true;
+        bool inRange = motor.positionInRange();
+        if (wasInRange && !inRange) Serial.println("EVT position beyond PMAX range (pos/stop-to-POS disabled until 'zero')");
+        wasInRange = inRange;
+
         if (millis() - motor.lastFeedbackMs() > FEEDBACK_LOST_MS) {
             disableMotor();
             Serial.println("EVT feedback lost: disabled");

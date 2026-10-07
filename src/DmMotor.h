@@ -41,7 +41,11 @@ public:
     void enable()     { sendSpecial(0xFC); }
     void disable()    { sendSpecial(0xFD); }
     void clearError() { sendSpecial(0xFB); }
-    void setZero()    { sendSpecial(0xFE); }  // 現在位置を 0 にする (無効状態で使う)
+    void setZero()                     // 現在位置を 0 にする (無効状態で使う)
+    {
+        sendSpecial(0xFE);
+        resetTurns();
+    }
 
     // POS_VEL モード指令 (位置 [rad], 速度上限 [rad/s])
     void sendPosVel(float pos, float vel);
@@ -55,12 +59,23 @@ public:
     // フィードバック待ち (poll しながら lastFeedbackMs が更新されるまで)
     bool waitFeedback(uint32_t timeoutMs);
 
-    void setLimits(float pmax, float vmax, float tmax) { pmax_ = pmax; vmax_ = vmax; tmax_ = tmax; }
+    void setLimits(float pmax, float vmax, float tmax)
+    {
+        pmax_ = pmax;
+        vmax_ = vmax;
+        tmax_ = tmax;
+        resetTurns();
+    }
     float pmax() const { return pmax_; }
     float vmax() const { return vmax_; }
     float tmax() const { return tmax_; }
 
+    // 位置 [rad]。フィードバックは ±PMAX を超えると反対側に回り込むので、
+    // 回り込みを数えて連続した値にしている。
     float position() const { return pos_; }
+    // 位置がフィードバックで正しく表せる範囲 (±PMAX) に収まっているか。
+    // 範囲外のときにフィードバックの位置を目標にすると、モーターが何回転も動いてしまう。
+    bool positionInRange() const { return turns_ == 0 && lastRaw_ != 0 && lastRaw_ != 0xFFFF; }
     float velocity() const { return vel_; }
     float torque() const { return tor_; }
     uint8_t status() const { return status_; }  // 0:無効 1:有効 8〜E:エラー
@@ -77,6 +92,7 @@ private:
     bool waitRegisterReply(uint8_t op, uint8_t rid, uint8_t out[4], uint32_t timeoutMs);
     void handleFeedback(const uint8_t d[8]);
     void recoverIfBusOff();
+    void resetTurns() { turns_ = 0; haveRaw_ = false; }
 
     bool checkScanReply(const twai_message_t &msg, float *pmax);
 
@@ -89,4 +105,8 @@ private:
     uint8_t status_ = 0, tMos_ = 0, tRotor_ = 0;
     uint32_t lastFbMs_ = 0;
     uint32_t rxCount_  = 0;  // 走査中に受信したフレーム数
+
+    int32_t turns_    = 0;      // 位置フィードバックの回り込み回数
+    uint16_t lastRaw_ = 0x8000; // 直前の位置フィードバック (生値)
+    bool haveRaw_     = false;
 };
