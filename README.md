@@ -1,6 +1,8 @@
 # AtomS3DamiaoTester
 
-M5Stack **AtomS3** と **ATOMIC CANBus Base** で DAMIAO モーター (DM-J4340-2EC など) をテストするツールです。
+<img src="docs/photo.jpg" alt="AtomS3 + ATOMIC CANBus Base で DM-J4310-2EC を動かしているところ" width="400">
+
+M5Stack **AtomS3** と **ATOMIC CANBus Base** で DAMIAO モーター (DM-J4310-2EC / DM-J4340-2EC など) をテストするツールです。
 PC の USB シリアルから**テキストのコマンド**を送ってモーターを操作します。
 
 [M5DamiaoTester](https://github.com/NaohiroIIDA/M5DamiaoTester) (CoreS3 + PwrCAN、タッチ画面版) を小型化した別バージョンです。
@@ -18,7 +20,7 @@ CAN 通信部分 (`DmMotor`) は同じコードを使っています。
 |---|---|
 | [M5Stack AtomS3](https://docs.m5stack.com/en/core/AtomS3) | 本体 (ESP32-S3、0.85 インチ画面、画面ボタン) |
 | [ATOMIC CANBus Base](https://shop.m5stack.com/products/atomic-canbus-base-ca-is3050g) | 絶縁 CAN トランシーバ (CA-IS3050G、最大 1Mbps) |
-| DAMIAO DM-J4340-2EC など | 制御対象のモーター (**CAN 2.0 / 1Mbps に設定すること**) |
+| DAMIAO DM-J4310-2EC / DM-J4340-2EC など | 制御対象のモーター (**CAN 2.0 / 1Mbps に設定すること**) |
 
 ### 接続
 
@@ -125,7 +127,7 @@ OK off
 
 ### 速度モードで回しすぎたとき (PMAX 範囲外)
 
-モーターが返す位置は ±PMAX (J4340 は ±12.5 rad ≒ ±716°) の範囲しか表せず、超えると反対側に回り込みます。
+モーターが返す位置は ±PMAX (初期設定では ±12.5 rad ≒ ±716°) の範囲しか表せず、超えると反対側に回り込みます。
 この状態で位置モードにすると、モーターは回り込んだ値を目標にして何回転も戻ってしまいます。
 
 そのため、`vel` で回して範囲を超えたときは次のように動作します。
@@ -184,5 +186,5 @@ src/main.cpp        シリアルコマンド・画面表示・制御
 
 ## 注意
 
-- AtomS3 + ATOMIC CANBus Base + DM-J4340 で、位置モード・速度モードとも動作を確認しています (CAN ピンは初期値の G5 = TX / G6 = RX、終端抵抗は 120Ω 1 本)。
+- AtomS3 + ATOMIC CANBus Base + DM-J4310-2EC で、位置モード・速度モードとも動作を確認しています (CAN ピンは初期値の G5 = TX / G6 = RX、終端抵抗は 120Ω 1 本)。
 - 初めて動かすときは、モーターを負荷から外し、すぐ電源を切れる状態で試してください。
